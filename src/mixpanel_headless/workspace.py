@@ -130,6 +130,7 @@ from mixpanel_headless.exceptions import (
     ValidationError,
     WorkspaceScopeError,
 )
+from mixpanel_headless.query_models import InsightsQuery
 from mixpanel_headless.types import (
     BUSINESS_CONTEXT_MAX_CHARS,
     ActivityFeedResult,
@@ -216,7 +217,6 @@ from mixpanel_headless.types import (
     HoldingConstant,
     InitSchemaEnforcementParams,
     InlineCustomProperty,
-    InsightsQuery,
     JQLResult,
     LexiconSchema,
     LexiconTag,
