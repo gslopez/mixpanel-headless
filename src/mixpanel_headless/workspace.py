@@ -216,6 +216,7 @@ from mixpanel_headless.types import (
     HoldingConstant,
     InitSchemaEnforcementParams,
     InlineCustomProperty,
+    InsightsQuery,
     JQLResult,
     LexiconSchema,
     LexiconTag,
@@ -2320,87 +2321,16 @@ class Workspace:
 
     def query(
         self,
-        events: str
-        | Metric
-        | CohortMetric
-        | Formula
-        | Sequence[str | Metric | CohortMetric | Formula],
-        *,
-        from_date: str | None = None,
-        to_date: str | None = None,
-        last: int = 30,
-        unit: QueryTimeUnit = "day",
-        math: MathType = "total",
-        math_property: str | None = None,
-        per_user: PerUserAggregation | None = None,
-        percentile_value: int | float | None = None,
-        group_by: str
-        | GroupBy
-        | CohortBreakdown
-        | FrequencyBreakdown
-        | list[str | GroupBy | CohortBreakdown | FrequencyBreakdown]
-        | None = None,
-        where: Filter | FrequencyFilter | list[Filter | FrequencyFilter] | None = None,
-        formula: str | None = None,
-        formula_label: str | None = None,
-        rolling: int | None = None,
-        cumulative: bool = False,
-        mode: Literal["timeseries", "total", "table"] = "timeseries",
-        time_comparison: TimeComparison | None = None,
-        data_group_id: int | None = None,
+        query: InsightsQuery,
     ) -> QueryResult:
         """Run a typed insights query against the Mixpanel API.
 
-        Generates bookmark params from keyword arguments, POSTs them inline
-        to ``/api/query/insights``, and returns a structured QueryResult
-        with lazy DataFrame conversion.
+        Accepts an ``InsightsQuery`` model, generates bookmark params,
+        POSTs them to ``/api/query/insights``, and returns a structured
+        ``QueryResult`` with lazy DataFrame conversion.
 
         Args:
-            events: Event name(s) to query. Accepts a single string,
-                a Metric object, a CohortMetric object, a Formula
-                object, or a sequence mixing strings, Metrics,
-                CohortMetrics, and Formulas. Formula objects in the
-                list are extracted and appended as formula show clauses.
-                When events includes a CohortMetric, ``math``,
-                ``math_property``, and ``per_user`` are silently
-                ignored for that entry — cohort size is always counted
-                as unique users (CM3).
-            from_date: Start date (YYYY-MM-DD). If set, overrides ``last``.
-            to_date: End date (YYYY-MM-DD). Requires ``from_date``.
-            last: Relative time range in days. Default: 30.
-                Ignored if ``from_date`` is set.
-            unit: Time aggregation unit. Default: ``"day"``.
-            math: Aggregation function for plain-string events.
-                Default: ``"total"``.
-            math_property: Property name for property-based math
-                (average, sum, percentiles).
-            per_user: Per-user pre-aggregation (average, total, min, max).
-            percentile_value: Custom percentile value (e.g. 95 for p95).
-                Required when ``math="percentile"``. Maps to ``percentile``
-                in bookmark measurement. Ignored for other math types.
-            group_by: Break down results by property or cohort membership.
-                Accepts a string, ``GroupBy``, ``CohortBreakdown``, or
-                list of any mix.
-            where: Filter results by conditions. Accepts a Filter
-                or list of Filters.
-            formula: Formula expression referencing events by position
-                (A, B, C...). Requires 2+ events. Cannot be combined
-                with Formula objects in ``events``.
-            formula_label: Display label for formula result.
-            rolling: Rolling window size in periods.
-                Mutually exclusive with ``cumulative``.
-            cumulative: Enable cumulative analysis mode.
-                Mutually exclusive with ``rolling``.
-            mode: Result shape. ``"timeseries"`` returns per-period data,
-                ``"total"`` returns a single aggregate, ``"table"`` returns
-                tabular data. Default: ``"timeseries"``.
-            time_comparison: Optional period-over-period comparison.
-                Use ``TimeComparison.relative("month")`` for previous
-                month, ``TimeComparison.absolute_start("2026-01-01")``
-                for a fixed start date, etc. Default: ``None``.
-            data_group_id: Optional data group ID for group-level
-                analytics. Scopes the query to a specific data group.
-                Default: ``None``.
+            query: An ``InsightsQuery`` model with all query parameters.
 
         Returns:
             QueryResult with series data, DataFrame, and metadata.
@@ -2414,50 +2344,31 @@ class Workspace:
 
         Example:
             ```python
+            from mixpanel_headless import InsightsQuery, Metric, Formula
+
             ws = Workspace()
 
             # Simple event query
-            result = ws.query("Login")
-            print(result.df.head())
+            result = ws.query(InsightsQuery(events=[Metric("Login")]))
 
             # With aggregation and time range
-            result = ws.query("Login", math="unique", last=7, unit="day")
+            result = ws.query(InsightsQuery(
+                events=[Metric("Login", math="unique")],
+                last=7, unit="day",
+            ))
 
-            # Multi-event with formula (top-level parameter)
-            result = ws.query(
-                [Metric("Signup", math="unique"), Metric("Purchase", math="unique")],
+            # Multi-event with formula
+            result = ws.query(InsightsQuery(
+                events=[
+                    Metric("Signup", math="unique"),
+                    Metric("Purchase", math="unique"),
+                ],
                 formula="(B / A) * 100",
                 formula_label="Conversion Rate",
-            )
-
-            # Multi-event with formula (Formula in list)
-            result = ws.query(
-                [Metric("Signup", math="unique"),
-                 Metric("Purchase", math="unique"),
-                 Formula("(B / A) * 100", label="Conversion Rate")],
-            )
+            ))
             ```
         """
-        params = self._resolve_and_build_params(
-            events=events,
-            from_date=from_date,
-            to_date=to_date,
-            last=last,
-            unit=unit,
-            math=math,
-            math_property=math_property,
-            per_user=per_user,
-            percentile_value=percentile_value,
-            group_by=group_by,
-            where=where,
-            formula=formula,
-            formula_label=formula_label,
-            rolling=rolling,
-            cumulative=cumulative,
-            mode=mode,
-            time_comparison=time_comparison,
-            data_group_id=data_group_id,
-        )
+        params = self.build_params(query)
 
         return self._live_query_service.query(
             bookmark_params=params,
@@ -2466,72 +2377,16 @@ class Workspace:
 
     def build_params(
         self,
-        events: str
-        | Metric
-        | CohortMetric
-        | Formula
-        | Sequence[str | Metric | CohortMetric | Formula],
-        *,
-        from_date: str | None = None,
-        to_date: str | None = None,
-        last: int = 30,
-        unit: QueryTimeUnit = "day",
-        math: MathType = "total",
-        math_property: str | None = None,
-        per_user: PerUserAggregation | None = None,
-        percentile_value: int | float | None = None,
-        group_by: str
-        | GroupBy
-        | CohortBreakdown
-        | FrequencyBreakdown
-        | list[str | GroupBy | CohortBreakdown | FrequencyBreakdown]
-        | None = None,
-        where: Filter | FrequencyFilter | list[Filter | FrequencyFilter] | None = None,
-        formula: str | None = None,
-        formula_label: str | None = None,
-        rolling: int | None = None,
-        cumulative: bool = False,
-        mode: Literal["timeseries", "total", "table"] = "timeseries",
-        time_comparison: TimeComparison | None = None,
-        data_group_id: int | None = None,
+        query: InsightsQuery,
     ) -> dict[str, Any]:
         """Build validated bookmark params without executing the API call.
 
-        Has the same signature as :meth:`query` but returns the generated
-        bookmark params dict instead of querying the Mixpanel API. Useful
-        for debugging, inspecting generated JSON, persisting via
-        :meth:`create_bookmark`, or testing.
+        Accepts an ``InsightsQuery`` model and returns the generated
+        bookmark params dict. Useful for debugging, inspecting generated
+        JSON, persisting via :meth:`create_bookmark`, or testing.
 
         Args:
-            events: Event name(s) to query. Accepts a single string,
-                a ``Metric``, ``CohortMetric``, ``Formula``, or a
-                sequence mixing strings, ``Metric``s, ``CohortMetric``s,
-                and ``Formula``s.
-            from_date: Start date (YYYY-MM-DD). If set, overrides ``last``.
-            to_date: End date (YYYY-MM-DD). Requires ``from_date``.
-            last: Relative time range in days. Default: 30.
-            unit: Time aggregation unit. Default: ``"day"``.
-            math: Aggregation function for plain-string events.
-                Default: ``"total"``.
-            math_property: Property name for property-based math.
-            per_user: Per-user pre-aggregation.
-            percentile_value: Custom percentile value (e.g. 95).
-                Required when ``math="percentile"``.
-            group_by: Break down results by property or cohort membership.
-                Accepts a string, ``GroupBy``, ``CohortBreakdown``, or
-                list of any mix.
-            where: Filter results by conditions.
-            formula: Formula expression referencing events by position.
-            formula_label: Display label for formula result.
-            rolling: Rolling window size in periods.
-            cumulative: Enable cumulative analysis mode.
-            mode: Result shape. Default: ``"timeseries"``.
-            time_comparison: Optional period-over-period comparison.
-                Use ``TimeComparison.relative("month")`` for previous
-                month, etc. Default: ``None``.
-            data_group_id: Optional data group ID for group-level
-                analytics. Scopes the query to a specific data group.
-                Default: ``None``.
+            query: An ``InsightsQuery`` model with all query parameters.
 
         Returns:
             Bookmark params dict with ``sections`` and ``displayOptions``
@@ -2543,40 +2398,33 @@ class Workspace:
 
         Example:
             ```python
+            from mixpanel_headless import InsightsQuery, Metric
+
             ws = Workspace()
-
-            # Inspect generated bookmark JSON
-            params = ws.build_params("Login", math="unique", last=7)
+            q = InsightsQuery(events=[Metric("Login", math="unique")], last=7)
+            params = ws.build_params(q)
             print(json.dumps(params, indent=2))
-
-            # Save as a bookmark (dashboard_id required)
-            ws.create_bookmark(CreateBookmarkParams(
-                name="Daily Unique Logins",
-                bookmark_type="insights",
-                params=params,
-                dashboard_id=12345,
-            ))
             ```
         """
         return self._resolve_and_build_params(
-            events=events,
-            from_date=from_date,
-            to_date=to_date,
-            last=last,
-            unit=unit,
-            math=math,
-            math_property=math_property,
-            per_user=per_user,
-            percentile_value=percentile_value,
-            group_by=group_by,
-            where=where,
-            formula=formula,
-            formula_label=formula_label,
-            rolling=rolling,
-            cumulative=cumulative,
-            mode=mode,
-            time_comparison=time_comparison,
-            data_group_id=data_group_id,
+            events=query.events,
+            from_date=query.from_date,
+            to_date=query.to_date,
+            last=query.last,
+            unit=query.unit,
+            math=query.math,
+            math_property=query.math_property,
+            per_user=query.per_user,
+            percentile_value=query.percentile_value,
+            group_by=query.group_by,
+            where=query.where,
+            formula=query.formula,
+            formula_label=query.formula_label,
+            rolling=query.rolling,
+            cumulative=query.cumulative,
+            mode=query.mode,
+            time_comparison=query.time_comparison,
+            data_group_id=query.data_group_id,
         )
 
     def _resolve_and_build_params(

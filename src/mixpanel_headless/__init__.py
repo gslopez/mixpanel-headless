@@ -205,6 +205,7 @@ from mixpanel_headless.types import (
     HoldingConstant,
     InitSchemaEnforcementParams,
     InlineCustomProperty,
+    InsightsQuery,
     JQLResult,
     LexiconDefinition,
     LexiconMetadata,
@@ -382,6 +383,8 @@ __all__ = [
     "RegionProbeNetworkError",
     "WorkspaceScopeError",
     "BusinessContextValidationError",
+    # Query input models
+    "InsightsQuery",
     # Result types
     "SegmentationResult",
     "FunnelResult",
