@@ -35,7 +35,7 @@ class InsightsQuery(BaseModel):
     ``Workspace.query()`` into a single validated object. Useful as a
     JSON-schema source for MCP tools and other schema-driven consumers.
 
-    Example:
+    Example (typed):
         ```python
         from mixpanel_headless import InsightsQuery, Metric, Filter
 
@@ -46,6 +46,17 @@ class InsightsQuery(BaseModel):
         )
         params = ws.build_params(q)
         result = ws.query(q)
+        ```
+
+    Example (dicts):
+        ```python
+        from mixpanel_headless import InsightsQuery
+
+        q = InsightsQuery.model_validate({
+            "events": [{"event": "Login", "math": "unique"}],
+            "where": [{"_property": "country", "_operator": "equals", "_value": ["US"]}],
+            "last": 7,
+        })
         ```
     """
 
