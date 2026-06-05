@@ -273,6 +273,7 @@ from mixpanel_headless.types import (
     WebhookTestParams,
     WebhookTestResult,
 )
+from mixpanel_headless.query_models import InsightsQuery
 from mixpanel_headless.workspace import Workspace
 
 __version__ = "0.1.1"
@@ -371,6 +372,8 @@ __all__ = [
     "RegionProbeNetworkError",
     "WorkspaceScopeError",
     "BusinessContextValidationError",
+    # Query input models
+    "InsightsQuery",
     # Result types
     "SegmentationResult",
     "FunnelResult",
