@@ -58,53 +58,50 @@ enforcement = ws.get_schema_enforcement()
 audit = ws.run_audit()
 
 # Insights queries — typed, composable analytics
-from mixpanel_headless import Metric, Filter, Formula
+from mixpanel_headless import Metric, Filter, Formula, InsightsQuery, FunnelQuery, RetentionQuery, FlowQuery
 
 # Simple event query (last 30 days by default)
-result = ws.query("Login")
+result = ws.query(InsightsQuery(events=["Login"]))
 print(result.df)
 
 # DAU with breakdown
-result = ws.query("Login", math="dau", group_by="platform", last=90)
+result = ws.query(InsightsQuery(events=["Login"], math="dau", group_by=["platform"], last=90))
 
 # Multi-metric formula: conversion rate
-result = ws.query(
-    [Metric("Signup", math="unique"), Metric("Purchase", math="unique")],
+result = ws.query(InsightsQuery(
+    events=[Metric("Signup", math="unique"), Metric("Purchase", math="unique")],
     formula="(B / A) * 100",
     formula_label="Conversion Rate",
     unit="week",
-)
+))
 
 # Filtered aggregation with numeric breakdown
-result = ws.query(
-    "Purchase",
-    math="total",
+result = ws.query(InsightsQuery(
+    events=["Purchase"], math="total",
     math_property="amount",
     where=[Filter.equals("country", "US"), Filter.greater_than("amount", 50)],
-    group_by="platform",
-)
+    group_by=["platform"],
+))
 
 # Typed funnel query — define steps inline
-funnel_result = ws.query_funnel(
-    ["Signup", "Add to Cart", "Purchase"],
+funnel_result = ws.query_funnel(FunnelQuery(
+    steps=["Signup", "Add to Cart", "Purchase"],
     conversion_window=7,
     last=90,
-)
+))
 print(funnel_result.overall_conversion_rate)
 
 # Typed retention query — cohort retention with event pairs
 from mixpanel_headless import RetentionEvent
-retention_result = ws.query_retention(
-    "Signup",
-    "Login",
-    retention_unit="week",
+retention_result = ws.query_retention(RetentionQuery(
+    born_event="Signup", return_event="Login", retention_unit="week",
     last=90,
-)
+))
 print(retention_result.df.head())  # cohort_date | bucket | count | rate
 
 # Typed flow query — analyze user paths through your product
 from mixpanel_headless import FlowStep
-flow_result = ws.query_flow("Purchase", forward=3, reverse=1)
+flow_result = ws.query_flow(FlowQuery(event="Purchase", forward=3, reverse=1))
 print(flow_result.nodes_df.head())   # step | event | type | count
 print(flow_result.top_transitions(5))
 
@@ -127,9 +124,9 @@ from mixpanel_headless import CohortCriteria, CohortDefinition, CohortBreakdown,
 power_users = CohortDefinition(
     CohortCriteria.did_event("Purchase", at_least=3, within_days=30)
 )
-result = ws.query("Login", where=Filter.in_cohort(power_users, name="Power Users"))
-result = ws.query("Login", group_by=CohortBreakdown(power_users, name="Power Users"))
-result = ws.query(CohortMetric(123, "Power Users"), last=90, unit="week")
+result = ws.query(InsightsQuery(events=["Login"], where=[Filter.in_cohort(power_users, name="Power Users")]))
+result = ws.query(InsightsQuery(events=["Login"], group_by=[CohortBreakdown(power_users, name="Power Users")]))
+result = ws.query(InsightsQuery(events=[CohortMetric(123, "Power Users")], last=90, unit="week"))
 
 # Legacy live queries
 segmentation = ws.segmentation(
@@ -271,6 +268,14 @@ Discovery commands let you survey what exists before writing queries—no guessi
 - One-time processing without local persistence
 - Memory-efficient iteration over large datasets
 
+**Session Replay** — Discover, fetch, and analyze rrweb session recordings:
+
+- Discover a user's replays by date window, or hydrate explicit replay IDs
+- Fetch the raw rrweb stream (rrweb-player compatible) or stream it with bounded memory
+- Project sessions into DataFrames (`sessions_df`, `actions_df`, `elements_df`) plus an LLM-friendly action timeline
+- Correlate the Mixpanel events that fired during each session; rank clicks, find rage-clicks, surface error sessions
+- Signed CDN URLs are masked by default and never logged
+
 ## For Humans and Agents
 
 The structured output and deterministic command interface make `mixpanel_headless` particularly effective for AI coding agents—the same properties that make it scriptable for humans make it reliable for automated workflows.
@@ -302,6 +307,7 @@ For interactive exploration of the codebase itself, see [DeepWiki](https://deepw
 - [Retention Queries](guide/query-retention.md) — Typed retention analysis with event pairs, custom buckets, and alignment modes
 - [Flow Queries](guide/query-flows.md) — Typed flow path analysis with direction controls and visualization modes
 - [User Profile Queries](guide/query-users.md) — Typed user profile queries with filtering, sorting, and aggregation
+- [Session Replay](guide/session-replay.md) — Discover, fetch, and analyze rrweb session recordings
 - [API Reference](api/index.md) — Complete Python API documentation
 - [Entity Management](guide/entity-management.md) — Manage dashboards, reports, cohorts, feature flags, experiments, alerts, annotations, and webhooks
 - [Data Governance](guide/data-governance.md) — Manage Lexicon definitions, drop filters, custom properties, custom events, and lookup tables

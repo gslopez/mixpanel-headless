@@ -11,7 +11,7 @@ A complete programmable interface to Mixpanel analytics—Python library and CLI
 
 Mixpanel's web UI is powerful for interactive exploration, but programmatic access requires navigating multiple REST endpoints with different conventions. **mixpanel_headless** provides a unified interface: discover your schema, run analytics queries, stream data, and manage entities—all through consistent Python methods or CLI commands.
 
-Core analytics—typed Insights engine queries (DAU/WAU/MAU, formulas, filters, breakdowns, cohort-scoped queries, period-over-period comparison, frequency analysis), typed funnel queries (ad-hoc steps, exclusions, conversion windows), typed retention queries (event pairs, custom buckets, alignment modes), typed flow queries (path analysis, direction controls, visualization modes), typed user profile queries (property filtering, sorting, parallel fetching, aggregate statistics), segmentation, saved reports—plus entity management (dashboards, reports, cohorts, feature flags, experiments), and streaming data extraction.
+Core analytics—typed Insights engine queries (DAU/WAU/MAU, formulas, filters, breakdowns, cohort-scoped queries, period-over-period comparison, frequency analysis), typed funnel queries (ad-hoc steps, exclusions, conversion windows), typed retention queries (event pairs, custom buckets, alignment modes), typed flow queries (path analysis, direction controls, visualization modes), typed user profile queries (property filtering, sorting, parallel fetching, aggregate statistics), segmentation, saved reports—plus entity management (dashboards, reports, cohorts, feature flags, experiments), streaming data extraction, and session replay (discover, fetch, and analyze rrweb session recordings).
 
 ## Installation
 
@@ -113,7 +113,8 @@ import mixpanel_headless as mp
 ws = mp.Workspace()
 
 # Typed insights query (recommended)
-result = ws.query("Purchase", math="unique", group_by="country", last=30)
+from mixpanel_headless import InsightsQuery
+result = ws.query(InsightsQuery(events=["Purchase"], math="unique", group_by=["country"], last=30))
 print(result.df)
 ```
 
@@ -136,8 +137,11 @@ for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
 
 ```python
 import mixpanel_headless as mp
-from mixpanel_headless import Metric, Filter, Formula, GroupBy, RetentionEvent
-from mixpanel_headless import TimeComparison, FrequencyBreakdown, FrequencyFilter
+from mixpanel_headless import (
+    InsightsQuery, FunnelQuery, RetentionQuery, FlowQuery,
+    Metric, Filter, Formula, GroupBy, RetentionEvent,
+    TimeComparison, FrequencyBreakdown, FrequencyFilter,
+)
 
 ws = mp.Workspace()
 
@@ -148,55 +152,54 @@ funnels = ws.funnels()
 cohorts = ws.cohorts()
 
 # Insights queries — typed, composable analytics
-result = ws.query("Login")                            # simple event count
-result = ws.query("Login", math="dau", last=90)       # DAU trend
-result = ws.query("Purchase", math="total",             # revenue by country
-    math_property="amount", group_by="country")
-result = ws.query(                                     # conversion rate formula
-    [Metric("Signup", math="unique"), Metric("Purchase", math="unique")],
+result = ws.query(InsightsQuery(events=["Login"]))                          # simple event count
+result = ws.query(InsightsQuery(events=["Login"], math="dau", last=90))     # DAU trend
+result = ws.query(InsightsQuery(events=["Purchase"], math="total",          # revenue by country
+    math_property="amount", group_by=["country"]))
+result = ws.query(InsightsQuery(                                            # conversion rate formula
+    events=[Metric("Signup", math="unique"), Metric("Purchase", math="unique")],
     formula="(B / A) * 100",
     formula_label="Conversion Rate",
     unit="week",
-)
-result = ws.query("Purchase",                          # filtered with breakdown
-    where=Filter.equals("country", "US"),
-    group_by=GroupBy("amount", property_type="number", bucket_size=50),
-)
+))
+result = ws.query(InsightsQuery(events=["Purchase"],                        # filtered with breakdown
+    where=[Filter.equals("country", "US")],
+    group_by=[GroupBy("amount", property_type="number", bucket_size=50)],
+))
 print(result.df)  # pandas DataFrame
 
 # Period-over-period comparison — compare against previous month
-result = ws.query("Login", math="dau",
-    time_comparison=TimeComparison.relative("month"), last=30)
+result = ws.query(InsightsQuery(events=["Login"], math="dau",
+    time_comparison=TimeComparison.relative("month"), last=30))
 
 # Frequency breakdown — segment by purchase frequency
-result = ws.query("Login",
-    group_by=FrequencyBreakdown(event="Purchase", bucket_max=10),
-    last=30)
+result = ws.query(InsightsQuery(events=["Login"],
+    group_by=[FrequencyBreakdown(event="Purchase", bucket_max=10)],
+    last=30))
 
 # New filter methods
-result = ws.query("Purchase",
-    where=[Filter.at_least("amount", 50), Filter.starts_with("email", "admin")])
+result = ws.query(InsightsQuery(events=["Purchase"],
+    where=[Filter.at_least("amount", 50), Filter.starts_with("email", "admin")]))
 
 # Typed funnel query — define steps inline
-funnel = ws.query_funnel(
-    ["Signup", "Add to Cart", "Purchase"],
+funnel = ws.query_funnel(FunnelQuery(
+    steps=["Signup", "Add to Cart", "Purchase"],
     conversion_window=7,
     last=90,
-)
+))
 print(funnel.overall_conversion_rate)  # e.g. 0.12
 
 # Typed retention query — cohort retention with event pairs
-retention = ws.query_retention(
-    "Signup",
-    "Login",
+retention = ws.query_retention(RetentionQuery(
+    born_event="Signup",
+    return_event="Login",
     retention_unit="week",
     last=90,
-)
+))
 print(retention.df.head())  # cohort_date | bucket | count | rate
 
 # Typed flow query — analyze user paths
-from mixpanel_headless import FlowStep
-flow_result = ws.query_flow("Purchase", forward=3, reverse=1)
+flow_result = ws.query_flow(FlowQuery(event="Purchase", forward=3, reverse=1))
 print(flow_result.nodes_df.head())   # step | event | type | count
 print(flow_result.top_transitions(5))
 
@@ -220,8 +223,10 @@ from mixpanel_headless import CohortCriteria, CohortDefinition, CohortBreakdown
 power_users = CohortDefinition(
     CohortCriteria.did_event("Purchase", at_least=3, within_days=30)
 )
-result = ws.query("Login", where=Filter.in_cohort(power_users, name="Power Users"))
-result = ws.query("Login", group_by=CohortBreakdown(power_users, name="Power Users"))
+result = ws.query(InsightsQuery(events=["Login"],
+    where=[Filter.in_cohort(power_users, name="Power Users")]))
+result = ws.query(InsightsQuery(events=["Login"],
+    group_by=[CohortBreakdown(power_users, name="Power Users")]))
 
 # Legacy live analytics queries
 result = ws.segmentation(
@@ -263,6 +268,12 @@ lookup_tables = ws.list_lookup_tables()
 schemas = ws.list_schema_registry()
 enforcement = ws.get_schema_enforcement()
 audit = ws.run_audit()
+
+# Session replay — discover, fetch, and analyze rrweb recordings
+bundle = ws.replays_for_user("user-42", from_date="2025-01-01", to_date="2025-01-31")
+print(bundle.sessions_df)                   # one row per session: duration, clicks, errors
+print(bundle.replays[0].summary_markdown)   # LLM-friendly action timeline
+print(bundle.top_clicks(10))                # most-clicked elements across the bundle
 
 # Stream events for processing
 for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
@@ -323,6 +334,8 @@ for event in ws.stream_events(from_date="2025-01-01", to_date="2025-01-31"):
 
 **`mp schemas`** — Schema registry management: `list`, `create`, `create-bulk`, `update`, `update-bulk`, `delete`
 
+**`mp replays`** — Session replay: `list` (discover a user's replays or hydrate explicit IDs), `events` (Mixpanel events during a replay window), `sign` (sign replay IDs for CDN access — redacted by default), `fetch` (pull raw rrweb bytes), `analyze` (render the markdown action timeline), `for-user` (discover + fetch + analyze in one call)
+
 All commands support `--format` (`json`, `jsonl`, `table`, `csv`, `plain`) and `--help`.
 
 ### Filtering with --jq
@@ -352,6 +365,7 @@ Full documentation: [mixpanel.github.io/mixpanel-headless](https://mixpanel.gith
 - [Retention Queries](https://mixpanel.github.io/mixpanel-headless/guide/query-retention/) — Typed retention analysis with event pairs, custom buckets, alignment modes
 - [Flow Queries](https://mixpanel.github.io/mixpanel-headless/guide/query-flows/) — Typed flow path analysis with direction controls, visualization modes
 - [User Profile Queries](https://mixpanel.github.io/mixpanel-headless/guide/query-users/) — Profile filtering, sorting, parallel fetching, aggregate statistics
+- [Session Replay](https://mixpanel.github.io/mixpanel-headless/guide/session-replay/) — Discover, fetch, and analyze rrweb session recordings
 - [CLI Reference](https://mixpanel.github.io/mixpanel-headless/cli/)
 - [Python API](https://mixpanel.github.io/mixpanel-headless/api/)
 - [Streaming Guide](https://mixpanel.github.io/mixpanel-headless/guide/streaming/)
@@ -371,6 +385,7 @@ Key design features:
 - **Consistent interfaces**: Same operations available as Python methods and CLI commands
 - **Structured output**: All CLI commands support `--format json` for machine-readable responses, plus `--jq` for inline filtering
 - **Streaming data extraction**: Memory-efficient iterators for events and profiles
+- **Session replay**: Discover a user's rrweb recordings, fetch the raw event stream, and project them into session-level DataFrames plus an LLM-friendly action timeline (`replays_for_user`, `Replay`, `ReplayBundle`); signed CDN URLs are masked by default and never logged
 - **Three first-class account types**: `service_account` (Basic Auth) for unattended automation, `oauth_browser` (PKCE flow with auto-refreshed tokens) for interactive use, `oauth_token` (static bearer) for CI / agents
 - **Typed exceptions**: Error codes and context for programmatic handling
 
